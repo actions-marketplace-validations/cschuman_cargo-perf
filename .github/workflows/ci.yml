@@ -25,7 +25,7 @@ jobs:
           - os: windows-latest
             rust: beta
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,7 +33,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
 
       - name: Cache cargo registry
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -56,7 +56,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -70,7 +70,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -81,15 +81,15 @@ jobs:
         run: cargo fmt --all -- --check
 
   msrv:
-    name: MSRV (1.80)
+    name: MSRV (1.85)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Install Rust 1.80
+      - name: Install Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.80"
+          toolchain: "1.85"
 
       - name: Build with MSRV
         run: cargo build --verbose
@@ -98,7 +98,7 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -113,7 +113,7 @@ jobs:
     name: Dogfood
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -130,10 +130,29 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
 
       - name: Run security audit
         run: cargo audit
+
+  # Aggregate gate: this is the single required status check in branch protection.
+  # It passes only when every other job passes, so the required-check name stays
+  # stable ("CI") even when the test matrix changes. Without this, branch
+  # protection required a context named "CI" that no job ever produced, so every
+  # PR was permanently BLOCKED despite green checks.
+  ci:
+    name: CI
+    needs: [test, clippy, fmt, msrv, doc, dogfood, security]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job did not succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "One or more required CI jobs failed, were cancelled, or were skipped."
+          exit 1
+      - name: All checks passed
+        run: echo "All CI jobs succeeded."

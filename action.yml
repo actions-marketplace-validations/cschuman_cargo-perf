@@ -92,7 +92,7 @@ runs:
         echo "Inputs validated successfully"
 
     - name: Cache cargo-perf
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cargo/bin/cargo-perf
         key: cargo-perf-${{ inputs.version }}-${{ runner.os }}
@@ -179,7 +179,7 @@ runs:
 
     - name: Upload SARIF results
       if: inputs.sarif == 'true' && always()
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: results.sarif
         token: ${{ inputs.token }}
