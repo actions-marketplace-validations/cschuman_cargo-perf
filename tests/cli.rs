@@ -365,6 +365,71 @@ async fn bad() {
         .stdout(predicate::str::contains("async-block-in-async"));
 }
 
-// Note: The "cargo perf" invocation handling is tested via actual cargo
-// invocation, not by passing "perf" as first arg to the binary directly.
-// The re-parsing logic in main.rs handles args from cargo's invocation path.
+// Cargo runs external subcommands as `cargo-perf perf <args>`: the subcommand
+// name arrives as argv[1]. Every documented entry point (`cargo perf ...`)
+// goes through this path, so these tests pass "perf" exactly as cargo does.
+
+#[test]
+fn test_cargo_subcommand_invocation_version() {
+    cargo_perf()
+        .arg("perf")
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cargo-perf"));
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_rules() {
+    cargo_perf()
+        .arg("perf")
+        .arg("rules")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_check() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    cargo_perf()
+        .arg("perf")
+        .arg("check")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_default_check() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // `cargo perf` with no subcommand runs check on --path
+    cargo_perf()
+        .arg("perf")
+        .arg("--path")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}

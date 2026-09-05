@@ -116,17 +116,24 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run() -> Result<()> {
-    let cli = Cli::parse();
+/// Parse the command line, tolerating the `perf` token cargo inserts at
+/// argv[1] when the binary runs as `cargo perf ...`.
+///
+/// The token has to be dropped *before* parsing: `Cli::parse()` exits on an
+/// unknown subcommand, so a parse-then-strip order never reaches the strip.
+fn parse_cli<I>(args: I) -> Cli
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut args: Vec<String> = args.into_iter().collect();
+    if args.get(1).map(String::as_str) == Some("perf") {
+        args.remove(1);
+    }
+    Cli::parse_from(args)
+}
 
-    // Handle "cargo perf" invocation (first arg is "perf")
-    let args: Vec<String> = std::env::args().collect();
-    let cli = if args.get(1).map(|s| s.as_str()) == Some("perf") {
-        // Re-parse skipping the "perf" argument
-        Cli::parse_from(std::iter::once("cargo-perf".to_string()).chain(args.into_iter().skip(2)))
-    } else {
-        cli
-    };
+fn run() -> Result<()> {
+    let cli = parse_cli(std::env::args());
 
     let config = Config::load_or_default(&cli.path)?;
 
@@ -760,4 +767,35 @@ fn run_fix(path: &Path, config: &Config, dry_run: bool, rules_filter: Option<&st
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(args: &[&str]) -> Vec<String> {
+        args.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn parse_cli_strips_cargo_subcommand_token() {
+        let cli = parse_cli(argv(&["cargo-perf", "perf", "rules"]));
+        assert!(matches!(cli.command, Some(Commands::Rules)));
+    }
+
+    #[test]
+    fn parse_cli_without_cargo_token_is_unchanged() {
+        let cli = parse_cli(argv(&["cargo-perf", "rules"]));
+        assert!(matches!(cli.command, Some(Commands::Rules)));
+    }
+
+    #[test]
+    fn parse_cli_only_strips_perf_at_argv1() {
+        // A positional named "perf" after the subcommand is a path, not cargo's token.
+        let cli = parse_cli(argv(&["cargo-perf", "check", "perf"]));
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Check { ref path, .. }) if path == Path::new("perf")
+        ));
+    }
 }
