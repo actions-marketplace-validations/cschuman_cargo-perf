@@ -433,3 +433,83 @@ async fn bad() {
         .success()
         .stdout(predicate::str::contains("async-block-in-async"));
 }
+
+// action.yml runs `cargo perf check "$PATH" --format sarif` and the getting
+// started guide documents `cargo perf check --baseline --fail-on error`:
+// output and threshold flags must be accepted after the subcommand too.
+
+#[test]
+fn test_check_format_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // Exact shape used by action.yml
+    cargo_perf()
+        .arg("perf")
+        .arg("check")
+        .arg(temp.path())
+        .arg("--format")
+        .arg("sarif")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sarif-schema"))
+        .stdout(predicate::str::contains("ruleId"));
+}
+
+#[test]
+fn test_check_fail_on_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // async-block-in-async is Error severity, so this must fail
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .arg("--fail-on")
+        .arg("error")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("diagnostic(s) at or above"));
+}
+
+#[test]
+fn test_check_min_severity_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("code.rs"),
+        r#"
+fn test(data: &[String]) {
+    for s in data {
+        let _ = s.clone();
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    // clone-in-hot-loop is below Error, so raising the floor hides it
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .arg("--min-severity")
+        .arg("error")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("clone-in-hot-loop").not());
+}

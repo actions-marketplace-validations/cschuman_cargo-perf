@@ -18,15 +18,15 @@ struct Cli {
     path: PathBuf,
 
     /// Output format
-    #[arg(short, long, default_value = "console")]
+    #[arg(short, long, default_value = "console", global = true)]
     format: OutputFormat,
 
     /// Minimum severity to report
-    #[arg(long, default_value = "info")]
+    #[arg(long, default_value = "info", global = true)]
     min_severity: cargo_perf::Severity,
 
     /// Fail if any diagnostic meets this severity
-    #[arg(long)]
+    #[arg(long, global = true)]
     fail_on: Option<cargo_perf::Severity>,
 
     /// Specific rules to run (comma-separated)
