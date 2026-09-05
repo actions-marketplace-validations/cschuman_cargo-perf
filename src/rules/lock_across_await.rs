@@ -167,6 +167,30 @@ impl LockAcrossAwaitVisitor<'_> {
         }
     }
 
+    /// Collect every guard expression in a match-arm pattern.
+    ///
+    /// syn 3 represents `pat if cond` as a `Pat::Guard` wrapping the arm's
+    /// pattern (there is no `Arm::guard` field any more), and guard patterns may
+    /// nest inside `|`, tuples, parentheses, and so on. Walk the pattern and
+    /// return each guard expression; they are evaluated before any arm body
+    /// runs, so awaits inside them happen while the outer guards are held.
+    fn arm_guard_exprs(pat: &Pat) -> Vec<&Expr> {
+        struct GuardCollector<'ast> {
+            guards: Vec<&'ast Expr>,
+        }
+        impl<'ast> Visit<'ast> for GuardCollector<'ast> {
+            fn visit_pat_guard(&mut self, node: &'ast syn::PatGuard) {
+                self.guards.push(&node.guard);
+                // Descend only into the inner pattern: nested guard patterns live
+                // there, while the guard expression itself is analyzed by the caller.
+                self.visit_pat(&node.pat);
+            }
+        }
+        let mut collector = GuardCollector { guards: Vec::new() };
+        collector.visit_pat(pat);
+        collector.guards
+    }
+
     /// Analyze an expression appearing in statement position (or as a control-flow
     /// branch / match-arm body).
     ///
@@ -193,7 +217,7 @@ impl LockAcrossAwaitVisitor<'_> {
             Expr::Match(em) => {
                 self.find_awaits(&em.expr, active);
                 for arm in &em.arms {
-                    if let Some((_, guard_expr)) = &arm.guard {
+                    for guard_expr in Self::arm_guard_exprs(&arm.pat) {
                         self.find_awaits(guard_expr, active);
                     }
                     self.analyze_flow_expr(&arm.body, active);
