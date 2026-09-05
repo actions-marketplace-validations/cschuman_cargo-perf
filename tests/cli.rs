@@ -376,7 +376,8 @@ fn test_cargo_subcommand_invocation_version() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("cargo-perf"));
+        .stdout(predicate::str::starts_with("cargo-perf "))
+        .stdout(predicate::str::is_match(r"^cargo-perf \d+\.\d+\.\d+").unwrap());
 }
 
 #[test]
@@ -502,6 +503,14 @@ fn test(data: &[String]) {
 "#,
     )
     .unwrap();
+
+    // Positive control: the rule fires on this fixture with no floor set.
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("clone-in-hot-loop"));
 
     // clone-in-hot-loop is below Error, so raising the floor hides it
     cargo_perf()

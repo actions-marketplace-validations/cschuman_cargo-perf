@@ -122,9 +122,11 @@ jobs:
         run: cargo build --release
 
       - name: Run cargo-perf on itself
+        # Invoked as a real cargo subcommand so the documented `cargo perf`
+        # entry point is exercised in CI, not just the bare binary.
         run: |
-          ./target/release/cargo-perf check src/
-          echo "cargo-perf found no issues in its own codebase!"
+          PATH="$PWD/target/release:$PATH" cargo perf check src/
+          echo "cargo-perf analyzed its own codebase successfully"
 
   security:
     name: Security Audit
