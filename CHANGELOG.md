@@ -16,6 +16,17 @@ All notable changes to cargo-perf will be documented in this file.
   `thiserror` derives already use `syn` 3); it remains only behind the optional
   `lsp` feature, pulled by `async-trait` and other `tower-lsp` proc-macros.
 
+### Fixed
+- `cargo perf ...` failed with "unrecognized subcommand 'perf'": the CLI parsed
+  argv before stripping the `perf` token cargo inserts for external
+  subcommands, so every documented entry point was unusable when invoked
+  through cargo. The token is now stripped before parsing, and the cargo
+  invocation path is covered by CLI tests.
+- `--format`, `--min-severity`, and `--fail-on` are now global flags, so the
+  documented forms `cargo perf check <path> --format sarif` (used by
+  `action.yml`) and `cargo perf check --baseline --fail-on error` parse.
+  Previously they were only accepted before the subcommand.
+
 ## [0.6.0] - 2026-01-12
 
 ### Added
