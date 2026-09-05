@@ -790,6 +790,31 @@ mod tests {
     }
 
     #[test]
+    fn test_detects_await_in_match_arm_guard() {
+        // An `.await` inside a match arm *guard* (`pat if cond.await =>`) is
+        // evaluated while any outer std guard is still held. The guard expression
+        // must be checked against the active guards, not only the arm bodies.
+        let source = r#"
+            async fn route(m: &std::sync::Mutex<i32>, ev: u8) {
+                let guard = m.lock().unwrap();
+                let _v = *guard;
+                match ev {
+                    0 if is_ready().await => {}
+                    _ => {}
+                }
+            }
+        "#;
+        let diagnostics = check_code(source);
+        assert_eq!(
+            diagnostics.len(),
+            1,
+            "await inside a match arm guard while a std guard is held must fire: {:?}",
+            diagnostics
+        );
+        assert_eq!(diagnostics[0].severity, Severity::Error);
+    }
+
+    #[test]
     fn test_detects_guard_declared_inside_else_branch() {
         // The `else` arm of an if must be recursed into as well.
         let source = r#"
