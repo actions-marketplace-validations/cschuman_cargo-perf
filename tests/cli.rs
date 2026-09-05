@@ -365,6 +365,160 @@ async fn bad() {
         .stdout(predicate::str::contains("async-block-in-async"));
 }
 
-// Note: The "cargo perf" invocation handling is tested via actual cargo
-// invocation, not by passing "perf" as first arg to the binary directly.
-// The re-parsing logic in main.rs handles args from cargo's invocation path.
+// Cargo runs external subcommands as `cargo-perf perf <args>`: the subcommand
+// name arrives as argv[1]. Every documented entry point (`cargo perf ...`)
+// goes through this path, so these tests pass "perf" exactly as cargo does.
+
+#[test]
+fn test_cargo_subcommand_invocation_version() {
+    cargo_perf()
+        .arg("perf")
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("cargo-perf "))
+        .stdout(predicate::str::is_match(r"^cargo-perf \d+\.\d+\.\d+").unwrap());
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_rules() {
+    cargo_perf()
+        .arg("perf")
+        .arg("rules")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_check() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    cargo_perf()
+        .arg("perf")
+        .arg("check")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}
+
+#[test]
+fn test_cargo_subcommand_invocation_default_check() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // `cargo perf` with no subcommand runs check on --path
+    cargo_perf()
+        .arg("perf")
+        .arg("--path")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("async-block-in-async"));
+}
+
+// action.yml runs `cargo perf check "$PATH" --format sarif` and the getting
+// started guide documents `cargo perf check --baseline --fail-on error`:
+// output and threshold flags must be accepted after the subcommand too.
+
+#[test]
+fn test_check_format_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // Exact shape used by action.yml
+    cargo_perf()
+        .arg("perf")
+        .arg("check")
+        .arg(temp.path())
+        .arg("--format")
+        .arg("sarif")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sarif-schema"))
+        .stdout(predicate::str::contains("ruleId"));
+}
+
+#[test]
+fn test_check_fail_on_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("bad.rs"),
+        r#"
+async fn bad() {
+    std::thread::sleep(std::time::Duration::from_secs(1));
+}
+"#,
+    )
+    .unwrap();
+
+    // async-block-in-async is Error severity, so this must fail
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .arg("--fail-on")
+        .arg("error")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("diagnostic(s) at or above"));
+}
+
+#[test]
+fn test_check_min_severity_flag_after_subcommand() {
+    let temp = TempDir::new().unwrap();
+    fs::write(
+        temp.path().join("code.rs"),
+        r#"
+fn test(data: &[String]) {
+    for s in data {
+        let _ = s.clone();
+    }
+}
+"#,
+    )
+    .unwrap();
+
+    // Positive control: the rule fires on this fixture with no floor set.
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("clone-in-hot-loop"));
+
+    // clone-in-hot-loop is below Error, so raising the floor hides it
+    cargo_perf()
+        .arg("check")
+        .arg(temp.path())
+        .arg("--min-severity")
+        .arg("error")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("clone-in-hot-loop").not());
+}

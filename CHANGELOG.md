@@ -2,6 +2,31 @@
 
 All notable changes to cargo-perf will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Migrated the parser from `syn` 2 to `syn` 3 (3.0.5). syn 3 moves a match
+  arm's `if` guard from `Arm::guard` into a `Pat::Guard` pattern;
+  `lock-across-await` now walks arm patterns for guard expressions, including
+  nested guard patterns, so an `.await` inside an arm guard is still attributed
+  to any live synchronous lock guard. Pinned by a unit test and a scored corpus
+  fixture (`tests/corpus/pos_guard_across_await_in_match_guard.rs`); the
+  accuracy scorecard is 81 fixtures, 29 TP, 1.00 / 1.00. This also removes
+  `syn` 2 from the default-feature dependency graph (`clap`, `serde`, and
+  `thiserror` derives already use `syn` 3); it remains only behind the optional
+  `lsp` feature, pulled by `async-trait` and other `tower-lsp` proc-macros.
+
+### Fixed
+- `cargo perf ...` failed with "unrecognized subcommand 'perf'": the CLI parsed
+  argv before stripping the `perf` token cargo inserts for external
+  subcommands, so every documented entry point was unusable when invoked
+  through cargo. The token is now stripped before parsing, and the cargo
+  invocation path is covered by CLI tests.
+- `--format`, `--min-severity`, and `--fail-on` are now global flags, so the
+  documented forms `cargo perf check <path> --format sarif` (used by
+  `action.yml`) and `cargo perf check --baseline --fail-on error` parse.
+  Previously they were only accepted before the subcommand.
+
 ## [0.6.0] - 2026-01-12
 
 ### Added
